@@ -81,6 +81,42 @@ async def on_message(message):
     elif message.content.lower() == "vitto stop":
         global EXIT
         EXIT = True
+    # Easter egg
+    elif "sono " in message.content:
+        msg = message.content
+        str_to_find = "sono "
+
+        # Index of the first character of str_to_find in msg
+        index = msg.find(str_to_find)
+
+        # Check if there's a negation
+        if msg.find("non sono ") == index - 4:
+            return
+        
+        # Delete the first part of the message which doesn't contain "sono ", including "sono "
+        printable_msg = msg[index + len(str_to_find):]
+
+        # String truncation caused by one of the endings
+        end = -1
+
+        # When these are found, the printable string ends
+        endings = [",", "."]
+
+        # Used to exit all loops
+        found = False
+
+        for i in range(len(printable_msg)):
+            if not found:
+                for e in endings:
+                    if printable_msg[i] == e:
+                        end = i
+                        found = True
+
+        if end != -1:
+            printable_msg = printable_msg[:end]
+        
+        await message.channel.send(f"Ciao { printable_msg.strip() }, sono Vittorio.")
+
     # Help
     elif message.content.lower() == "vitto help":
         await message.channel.send(f"Use `vitto start <host> <port>` to receive screenshots from the backend's host address and port.\n \
