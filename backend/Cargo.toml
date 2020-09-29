@@ -8,6 +8,8 @@ edition = "2018"
 
 [dependencies]
 tungstenite = "0.11.1"
+chrono = "0.4.18"
+image = "0.23.10"
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3.9"
