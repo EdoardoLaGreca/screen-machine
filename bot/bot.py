@@ -1,3 +1,6 @@
+#
+# DOCS: https://discordpy.readthedocs.io/en/latest/api.html
+#
 import discord # `pip install discord.py`
 import websockets # `pip install websockets`
 import time
