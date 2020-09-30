@@ -59,8 +59,8 @@ fn main() {
     let server = TcpListener::bind(listen_on).unwrap();
     println!("Listening on {} for connections...", listen_on);
 
-    let mut previous_screenshot: img::RgbaImage;
-    let mut current_screenshot: img::RgbaImage;
+    let mut previous_screenshot: img::RgbImage;
+    let mut current_screenshot: img::RgbImage;
 
     // Listen for WebSocket connections
     for stream in server.incoming() {
@@ -70,7 +70,7 @@ fn main() {
 
                 // Take a screenshot (and create a filename for it)
                 let filename = Local::now().format("Screenshot_%H-%M-%S").to_string();
-                let screenshot: img::RgbaImage = img::screenshot_active_window(mkind, filename).expect("An error occurred during the screenshot process (filesystem I/O ?)");
+                let screenshot: img::RgbImage = img::screenshot_active_window(mkind, filename).expect("An error occurred during the screenshot process (filesystem I/O ?)");
 
                 // Move screenshots
                 previous_screenshot = current_screenshot;
@@ -82,9 +82,9 @@ fn main() {
                 // If it's huge (aka most of the previous things has been deleted), send previous_screenshot (current_screenshot contains the blank one) as Vec<u8>
                 if diff >= img_diff {
 
-                    let image_as_bytevector: img::RgbaImage;
+                    let image_as_bytevector: img::RgbImage;
 
-                    // Make image ok for sending (from img::RgbaImage to Vec<u8>)
+                    // Make image ok for sending (from img::RgbImage to Vec<u8>)
                     for subpixel in previous_screenshot.data {
                         image_as_bytevector.data.push(subpixel)
                     }

@@ -7,20 +7,20 @@ use rayon::prelude::*;
 
 use crate::MachineKind;
 
-pub struct RgbaImage {
+pub struct RgbImage {
     pub data: Vec<[u8;4]>, // As a vector of pixels
     pub width: u32,
     pub height: u32
 }
 
-impl RgbaImage {
+impl RgbImage {
 
-    pub fn new(data: Vec<[u8;4]>, height: u32, width: u32) -> RgbaImage {
+    pub fn new(data: Vec<[u8;4]>, height: u32, width: u32) -> RgbImage {
 
         // Assert that data is correct
         assert!(width * height != data.len() as u32);
 
-        RgbaImage {
+        RgbImage {
             data: data,
             width: width,
             height: height
@@ -28,7 +28,7 @@ impl RgbaImage {
     }
 
     // Create a new instance from a vector of RGBA subpixels
-    pub fn from_rgba(data: Vec<u8>, height: u32, width: u32) -> RgbaImage {
+    pub fn from_rgba(data: Vec<u8>, height: u32, width: u32) -> RgbImage {
         let correct_data: Vec<[u8;4]> = vec![];
 
         // Assert that there are all the subpixels
@@ -47,7 +47,7 @@ impl RgbaImage {
             }
         }
 
-        RgbaImage::new(correct_data, width, height)
+        RgbImage::new(correct_data, width, height)
     }
 
     pub fn as_vec_u8(&self) -> Vec<u8> {
@@ -87,7 +87,7 @@ fn parallel_avg(v: Vec<[u8;4]>) -> [u64;3] {
 }
 
 // My own implementation
-pub fn calc_diff(img1: RgbaImage, img2: RgbaImage) -> u16 {
+pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u16 {
     // Calculate the average color of the two images
     let avg1 = parallel_avg(img1.data);
     let avg2 = parallel_avg(img2.data);
@@ -101,7 +101,12 @@ pub fn calc_diff(img1: RgbaImage, img2: RgbaImage) -> u16 {
 }
 */
 
-fn screenshot_active_window_unix(file: String) -> Result<RgbaImage, ()> {
+// My own implementation
+pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u16 {
+    // ...
+}
+
+fn screenshot_active_window_unix(file: String) -> Result<RgbImage, ()> {
     // Screenshot the current active window and save it in path
     screenshot_rs::screenshot_window(file);
 
@@ -120,18 +125,18 @@ fn screenshot_active_window_unix(file: String) -> Result<RgbaImage, ()> {
     let img_as_pixels: Vec<[u8; 4]> = vec![];
 
     Ok(
-        RgbaImage::from_rgba(img.to_vec(), img.width(), img.height())
+        RgbImage::from_rgba(img.to_vec(), img.width(), img.height())
     )
 }
 
 
-fn screenshot_active_window_windows(file: String) -> Result<RgbaImage, ()> {
+fn screenshot_active_window_windows(file: String) -> Result<RgbImage, ()> {
     todo!()
 }
 
 // Public function to screenshot the currently active window. Save the screenshot
 // in the file parameter, which should contain both the path and the filename
-pub fn screenshot_active_window(mkind: MachineKind, file: String) -> Result<RgbaImage, ()> {
+pub fn screenshot_active_window(mkind: MachineKind, file: String) -> Result<RgbImage, ()> {
     match mkind {
         MachineKind::Unix => screenshot_active_window_unix(file),
         MachineKind::Windows => screenshot_active_window_windows(file)
