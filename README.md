@@ -3,9 +3,7 @@ A bot/program that screenshots a MS Teams slide when it changes, saving the prev
 
 ## Roles
 `bot` = the actual Discord bot (client). The bot simply gets the images from the server and sends them in a discord channel.  
-`backend` = the actual program behind the scenes (server). The backend screenshots the current window (make it be MS Teams just before starting it) and listens for connections. After the client connects (should be immediate), every time the backend gets a screenshot, it's sent to the client.  
-
-The backend won't start taking screenshots until the client connects.
+`backend` = the actual program behind the scenes (server). The backend screenshots the current window (make it be MS Teams just before starting it) and listens for connections. After the client connects (should be immediate), every time the backend gets a screenshot, it's sent to the client.
 
 ## How to start
 First, start the Discord bot using this command (make sure you have a token, here it's hidden for obvious reasons).
