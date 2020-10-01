@@ -40,7 +40,7 @@ impl RgbImage {
         }
     }
 
-    // Create a new instance from a vector of RGBA subpixels
+    // Create a new instance from a vector of RGB subpixels
     pub fn from_rgb(data: Vec<u8>, height: u32, width: u32) -> RgbImage {
         let mut correct_data: Vec<[u8;3]> = vec![];
 
@@ -76,7 +76,7 @@ impl RgbImage {
     }
 }
 
-// Calculate the average value of a vector of RGBA pixels using Rayon (parallelism)
+// Calculate the average value of a vector of RGB pixels using Rayon (parallelism)
 fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
     // Average values for subpixels (excluding Alpha channel)
     let mut avg_r: u64 = 0;
@@ -160,7 +160,7 @@ fn screenshot_active_window_unix(file: String) -> Result<RgbImage, ()> {
     };
 
     // Assert that they are actual RBGA subpixels and not something else, just in case
-    assert!(img.len() % 3 == 0, "It's not a vector of RGBA subpixels");
+    assert!(img.len() % 3 == 0, "It's not a vector of RGB subpixels");
 
     Ok(
         RgbImage::from_rgb(img.to_vec(), img.width(), img.height())
