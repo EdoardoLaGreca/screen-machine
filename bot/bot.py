@@ -1,5 +1,8 @@
 #
-# DOCS: https://discordpy.readthedocs.io/en/latest/api.html
+# DOCS:
+#  - [Discord]    https://discordpy.readthedocs.io/en/latest/api.html
+#  - [Websockets] https://websockets.readthedocs.io/en/stable/
+#  - [PIL]        https://pillow.readthedocs.io/en/stable/reference/
 #
 import discord # `pip install discord.py`
 import websockets # `pip install websockets`
