@@ -159,7 +159,7 @@ fn screenshot_active_window_unix(file: String) -> Result<RgbImage, ()> {
         Err(_) => return Err(())
     };
 
-    // Assert that they are actual RBGA subpixels and not something else, just in case
+    // Assert that they are actual RGB subpixels and not something else, just in case
     assert!(img.len() % 3 == 0, "It's not a vector of RGB subpixels");
 
     Ok(
