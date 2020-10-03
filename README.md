@@ -20,7 +20,7 @@ cargo build --release --target-dir bin
 ```
 And finally, tell the bot that everything's ready (write this in a Discord channel where the bot is in).
 ```
-vitto start [[<host>] <port>]
+vitto start [<host> [<port>]]
 ```
 `host` = a custom (and optional) host.  
 `port` = a custom (and optional) port.  
