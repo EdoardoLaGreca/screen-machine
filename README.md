@@ -16,7 +16,7 @@ Then, compile and run the backend.
 ```
 cd backend/
 cargo build --release --target-dir bin
-./bin/backend
+./bin/release/backend
 ```
 And finally, tell the bot that everything's ready (write this in a Discord channel where the bot is in).
 ```
