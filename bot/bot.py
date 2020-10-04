@@ -6,6 +6,7 @@
 #
 import discord # `pip install discord.py`
 import websockets # `pip install websockets`
+import asyncio # `pip install asyncio`
 import time
 import os
 from PIL import Image
@@ -23,26 +24,43 @@ DEFAULT_ADDRESS = f"ws://{DEFAULT_HOST}:{DEFAULT_PORT}"
 EXIT = False
 
 # Send screenshot to client
-async def send_screenshot(image, discord_channel):
+async def send_screenshot(data, discord_channel):
     # Create a screenshot image and send it to the discord channel
-    screenshot = Image.fromarray(image)
-    await discord_channel.send(discord_channel, discord.File(screenshot))
+
+    #screenshot = Image.fromarray(image)
+    #await discord_channel.send(discord_channel, discord.File(screenshot))
+    
+    # Separate the height data from the screenshot data by the separator '|'
+    data = data.split(bytes('|', 'utf-8'), 1)
+    height = data[0]
+    img_data = data[1]
+    width = (len(img_data) / float(3)) / float(height) # unsupported operand type(s) for /: 'float' and 'bytes'
+
+    img = Image.frombuffer("RGB", (width, height), "raw")
+    #discord_channel.send(file=discord.File(img, '--.png'))
+    await discord_channel.send(discord.File(img))
+
+async def ws_handler(websocket, discord_channel):
+    while not EXIT:
+            print("Waiting for a screenshot...")
+            data = await websocket.recv()
+            print("[" + time.strftime("%H:%M:%S", time.localtime()) + "] Got a screenshot.")
+
+            await send_screenshot(data, discord_channel)
+            #print(screenshot) #DEBUG
+            print("Screenshot sent to Discord!")
 
 # Listen for screenshot (blocking) and return it
-async def get_screenshot(websocket, discord_channel):
-    global EXIT
-    while not EXIT:
-        screenshot = await websocket.recv()
-        await send_screenshot(screenshot, discord_channel)
-        #print(screenshot) #DEBUG
-        print("[" + time.strftime("%H:%M:%S", time.localtime()) + "] Got a screenshot.")
-
 async def start(host, port, discord_channel):
+    global EXIT
+
     # Start websocket client
     print(f"Starting on ws://{host}:{port}")
     uri = f"ws://{host}:{port}"
+    
     async with websockets.connect(uri) as websocket:
-        await get_screenshot(websocket, discord_channel)
+        await ws_handler(websocket, discord_channel)
+        
 
 @client.event
 async def on_ready():
@@ -81,6 +99,7 @@ async def on_message(message):
                 print("No host or port specified. Using defaults...")
         
         # Start the program based on the IP/hostname after "start"
+        #asyncio.get_event_loop().run_until_complete(start(host, port, message.channel))
         await start(host, port, message.channel)
 
     # Stop
