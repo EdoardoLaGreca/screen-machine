@@ -2,7 +2,8 @@
 backend/target
 backend/Cargo.lock
 backend/bin
-*/*.png
+backend/screenshots
+*.png
 
 # Bot (Python)
 bot/__pycache__
