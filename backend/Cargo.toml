@@ -16,4 +16,4 @@ rayon = "1.4.0"
 winapi = "0.3.9"
 
 [target.'cfg(unix)'.dependencies]
-screenshot-rs = "0.1.5"
+screenshot-rs = "0.1.5" # Requires `scrot`
