@@ -78,10 +78,16 @@ impl RgbImage {
 
 // Calculate the average value of a vector of RGB pixels using Rayon (parallelism)
 fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
+
     // Average values for subpixels (excluding Alpha channel)
     let mut avg_r: u64 = 0;
     let mut avg_g: u64 = 0;
     let mut avg_b: u64 = 0;
+
+    assert!(v.len() == 0, "Cannot divide by zero");
+
+    // Keep memorized the vector length
+    let v_len = v.len();
 
     {
         // Copy the values to do the calculations
@@ -113,16 +119,20 @@ fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
         avg_b = *(avg_b_arcmutex.lock().unwrap());
     }
 
-    avg_r /= v.len() as u64;
-    avg_g /= v.len() as u64;
-    avg_b /= v.len() as u64;
+    avg_r /= v_len as u64;
+    avg_g /= v_len as u64;
+    avg_b /= v_len as u64;
 
     return [avg_r as u8, avg_g as u8, avg_b as u8];
 }
 
 // A quantification of the differences between two screenshots
 // My own implementation
-pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u16 {
+pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u8 {
+
+    if img1.data.len() != img2.data.len() || min(img1.data.len(), img1.data.len()) == 0 {
+        return 100;
+    }
     
     // Calculate the average color for each image
     let avg_color_img1 = parallel_avg(img1.data);
@@ -137,10 +147,10 @@ pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u16 {
 
     // Min: 0 -> there is no difference at all
     // Max: 100 -> the two images are completely different
-    let difference_percentage: u16 = {
-        (difference[0] as f32 / 256f32 * 100f32) as u16 +
-        (difference[1] as f32 / 256f32 * 100f32) as u16 +
-        (difference[2] as f32 / 256f32 * 100f32) as u16
+    let difference_percentage: u8 = {
+        (difference[0] as f32 / 256f32 * 100f32) as u8 +
+        (difference[1] as f32 / 256f32 * 100f32) as u8 +
+        (difference[2] as f32 / 256f32 * 100f32) as u8
     };
 
     difference_percentage
