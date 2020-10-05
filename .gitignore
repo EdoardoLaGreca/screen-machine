@@ -9,3 +9,6 @@ backend/screenshots
 bot/__pycache__
 # For security reasons, hide the bot token
 bot/.env
+
+# VS Codium
+.vscode
