@@ -1,16 +1,18 @@
 extern crate screenshot_rs;
 extern crate chrono;
-extern crate image;
 extern crate rayon;
+extern crate png;
 
 use rayon::prelude::*;
+use png::{Decoder, Limits};
 
+use std::fs::File;
 use std::cmp::{max, min};
 use std::sync::{Arc, Mutex};
 
 use crate::MachineKind;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RgbImage {
     pub data: Vec<[u8;3]>, // As a vector of pixels
     pub width: u32,
@@ -31,7 +33,7 @@ impl RgbImage {
     pub fn from_pixels(data: Vec<[u8;3]>, height: u32, width: u32) -> RgbImage {
 
         // Assert that data is correct
-        assert!(width * height != data.len() as u32);
+        assert!(width * height == data.len() as u32);
 
         RgbImage {
             data: data,
@@ -57,6 +59,8 @@ impl RgbImage {
             if buffer_index == buffer.len() - 1 {
                 correct_data.push(buffer.clone());
                 buffer_index = 0;
+            } else {
+                buffer_index += 1;
             }
         }
 
@@ -130,7 +134,8 @@ fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
 // My own implementation
 pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u8 {
 
-    if img1.data.len() != img2.data.len() || min(img1.data.len(), img1.data.len()) == 0 {
+    // If sizes are different return 100
+    if img1.data.len() != img2.data.len() {
         return 100;
     }
     
@@ -161,19 +166,39 @@ fn screenshot_active_window_unix(file: String) -> Result<RgbImage, ()> {
     screenshot_rs::screenshot_window(file.clone());
 
     // Load the saved screenshot and return it
-    let result = image::open(file);
+    //let result = image::open(file);
+    let img = Decoder::new_with_limits(File::open(file).unwrap(), Limits::default());
 
-    // Image as a vector of subpixels
-    let img = match result {
-        Ok(i) => i.to_rgb(),
+    let mut img_data: Vec<u8> = vec![];
+
+    let width: u32;
+    let height: u32;
+
+    // Used to read the image data
+    let mut reader = match img.read_info() {
+        Ok(info) => {
+            // Also, get info about image width and height
+            width = info.0.width;
+            height = info.0.height;
+
+            info.1
+        },
         Err(_) => return Err(())
     };
 
+    // Fill img_data by reading data from reader
+    let mut row_buffer: Option<&[u8]> = reader.next_row().unwrap();
+    while let Some(buffer) = row_buffer {
+        //vec![img_data, buffer.to_vec()].concat();
+        img_data.extend_from_slice(buffer);
+        row_buffer = reader.next_row().unwrap();
+    }
+
     // Assert that they are actual RGB subpixels and not something else, just in case
-    assert!(img.len() % 3 == 0, "It's not a vector of RGB subpixels");
+    assert!(img_data.len() % 3 == 0, "It's not a vector of RGB subpixels");
 
     Ok(
-        RgbImage::from_rgb(img.to_vec(), img.width(), img.height())
+        RgbImage::from_rgb(img_data, width, height)
     )
 }
 

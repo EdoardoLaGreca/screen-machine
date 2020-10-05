@@ -1,14 +1,15 @@
-extern crate tungstenite;
 extern crate chrono;
 
-use tungstenite::server::accept;
 use chrono::prelude::*;
 
-use std::net::{TcpListener};
+use std::io::prelude::*;
+use std::net::{TcpListener, TcpStream};
 use std::thread::spawn;
 use std::time::Duration;
 
 mod img;
+
+// See this (to keep taking screenshots of the same window): https://stackoverflow.com/questions/5262413/does-xlib-have-an-active-window-event
 
 // A quantification of the differences between two screenshots (see crate::img::calc_diff()).
 // If the difference is higher or equal to this number, send the screenshot.
@@ -43,6 +44,70 @@ pub fn get_machine_kind() -> Result<MachineKind, ()> {
     }
 }
 
+fn handle_client(stream: &mut TcpStream, machine_kind: MachineKind) {
+    // Remote address of client
+    let remote_addr = stream.peer_addr().unwrap();
+    println!("Connected to {}", remote_addr.clone());
+
+    let mut previous_screenshot: img::RgbImage;
+    let mut current_screenshot: img::RgbImage = img::RgbImage::new();
+
+    loop {
+
+        // Take a screenshot (and create a filename for it)
+        let filename = Local::now().format("Screenshot_%H-%M-%S.png").to_string();
+        let screenshot: img::RgbImage = img::screenshot_active_window(machine_kind, format!("{}{}", SAVE_PATH, filename)).expect("An error occurred during the screenshot process (filesystem I/O ?)");
+        println!("Screenshot taken!");
+
+        // Move screenshots
+        previous_screenshot = current_screenshot.clone();
+        current_screenshot = screenshot;
+
+        // Both screenshots cannot be empty to calculate the difference
+        if previous_screenshot.data.len() != 0 && current_screenshot.data.len() != 0 {
+
+            // Calculate the difference between the two image
+            let diff = img::calc_diff(previous_screenshot.clone(), current_screenshot.clone());
+
+            // If it's huge (aka most of the previous things has been deleted), send previous_screenshot (current_screenshot contains the blank one) as Vec<u8>
+            if diff >= IMG_DIFF {
+                if previous_screenshot.height != 0 && previous_screenshot.width != 0 {
+
+                    println!("diff is {} which is greater than IMG_DIFF ({}).", diff, IMG_DIFF);
+
+                    // Assert that the screenshot's data is not empty
+                    assert!(previous_screenshot.data.len() != 0, "previous_screenshot's data doesn't exist.");
+
+                    let time_now = Local::now();
+
+                    println!("[{}] Sending image ({} x {})...", time_now.format("%H:%M:%S").to_string(), previous_screenshot.width, previous_screenshot.height);
+
+                    let img_bytes_num = previous_screenshot.data.len() * 3;
+
+                    // Create the message to send
+                    let mut msg: Vec<u8> = (previous_screenshot.height.to_string()).as_bytes().to_owned(); // Start with the image height
+                    msg.push('|' as u8); // Insert a separator
+                    msg.append(&mut img_bytes_num.to_string().as_bytes().to_owned()); // Insert the image length (width * height * 3) in bytes
+                    msg.push('|' as u8); // Insert a separator
+                    msg.append(&mut previous_screenshot.as_vec_u8().clone()); // Join it with the image data
+                    
+                    // Send image
+                    stream.write(&msg).expect("Uncaught stream error");
+                }
+            } else {
+                println!("diff is {} which is NOT greater than IMG_DIFF ({})", diff, IMG_DIFF);
+            }
+        } else {
+            println!("One of the two screenshots is empty (length = 0), not going to send it.")
+        }
+
+        // Sleep to prevent accidentally DoSsing the bot
+        std::thread::sleep(Duration::from_millis(SCREEN_DELAY))
+    }
+
+    println!("Disconnected from {}", remote_addr.clone());
+}
+
 fn main() {
 
     // Get which kind of machine we're running on
@@ -65,67 +130,14 @@ fn main() {
 
     loop {
 
-        let server = TcpListener::bind(LISTEN_ON).unwrap();
+        let listener = TcpListener::bind(LISTEN_ON).expect(&format!("Address {} is already in use.", LISTEN_ON));
         println!("Listening on {} for connections...", LISTEN_ON);
 
-        // Listen for WebSocket connections
-        for stream in server.incoming() {
-
+        // Accept connections
+        for stream in listener.incoming() {
             spawn ( move || {
-
-                let stream = stream.unwrap();
-
-                // Remote address of client
-                let remote_addr = stream.peer_addr().unwrap();
-
-                let mut websocket = accept(stream).unwrap();
-                println!("Connected to {}", remote_addr.clone());
-
-
-                let mut previous_screenshot: img::RgbImage;
-                let mut current_screenshot: img::RgbImage = img::RgbImage::new();
-
-                loop {
-
-                    // Take a screenshot (and create a filename for it)
-                    let filename = Local::now().format("Screenshot_%H-%M-%S.png").to_string();
-                    let screenshot: img::RgbImage = img::screenshot_active_window(mkind, format!("{}{}", SAVE_PATH, filename)).expect("An error occurred during the screenshot process (filesystem I/O ?)");
-                    println!("Screenshot taken!");
-
-                    // Move screenshots
-                    previous_screenshot = current_screenshot.clone();
-                    current_screenshot = screenshot;                
-
-                    // Calculate the difference between the two images
-                    let diff = img::calc_diff(previous_screenshot.clone(), current_screenshot.clone());
-                    print!("diff is {}", diff);
-
-                    // If it's huge (aka most of the previous things has been deleted), send previous_screenshot (current_screenshot contains the blank one) as Vec<u8>
-                    if diff >= IMG_DIFF {
-
-                        println!(" which is greater than IMG_DIFF ({}).", IMG_DIFF);
-
-                        let time_now = Local::now();
-
-                        println!("[{}:{}:{}] Sending image...", time_now.hour(), time_now.minute(), time_now.second());
-
-                        // Create the message to send
-                        let mut msg: Vec<u8> = (previous_screenshot.height.to_string()).as_bytes().to_owned(); // Start with the image height
-                        msg.push('|' as u8); // Insert a separator
-                        msg.append(&mut previous_screenshot.as_vec_u8().clone()); // Join it with the image data
-                        
-                        // Send image
-                        websocket.write_message(msg.into()).expect("Uncaught WebSocket error");
-                    } else {
-                        println!(" which is not greater than IMG_DIFF ({})", IMG_DIFF);
-                    }
-
-                    // Sleep to prevent accidentally DoSsing the bot
-                    std::thread::sleep(Duration::from_millis(SCREEN_DELAY))
-                }
+                handle_client(&mut stream.expect("Stream error"), mkind);
             });
         }
-
-        println!("Disconnected");
     }
 }
