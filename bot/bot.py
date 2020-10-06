@@ -7,7 +7,8 @@
 import discord # `pip install discord.py`
 import time
 import os
-from PIL import Image
+#from PIL import Image
+from io import BytesIO
 import socket
 import sys
 
@@ -18,6 +19,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 
 client = discord.Client()
 
+SLEEP_TIME_EMPTY_MSG = 0.5 # seconds
 BUFFER_SIZE = 4096
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = "4444"
@@ -25,97 +27,89 @@ DEFAULT_ADDRESS = f"ws://{DEFAULT_HOST}:{DEFAULT_PORT}"
 EXIT = False
 
 # Send screenshot to client
-async def send_screenshot(data, discord_channel):
-    print(len(data))
-    # Separate the height data from the screenshot data by the separator '|'
-    # data = data.split(bytes('|', 'utf-8'), 1)
-    # recvd_height = data[0].decode('utf-8')
-    # print("Received height (from bytes) = " + str(data[0]))
-    # print("Image length = " + str(len(data[1])))
+async def send_screenshot(data: bytes, height: int, discord_channel: discord.channel.TextChannel):
+    # Find null bytes
+    #data.find('\x00')
 
-    # height = int(recvd_height)
+    data_length = len(data)
 
-    # if height != 0:
-    #     img_data = data[1]
+    if height != 0 or data_length == 0:
 
-    #     width = int((len(img_data) / 3) / height)
-    #     img = Image.frombuffer("RGB", (width, height), img_data, "raw")
-    #     await discord_channel.send(discord.File(img))
-    # else:
-    #     print("Height is wrong (zero).")
+        width = int((len(data) / 3) / height)
+        print("Image size = " + str(width) + "x" + str(height) +", Image total length = " + str(len(data)))
 
+        #filename = "screenshot.png"
+        
+        #img = Image.frombuffer("RGB", (width, height), BytesIO(data), "raw")
+        # Set the attachment and send it
+        # discord_att = discord.Attachment()
+        # discord_att.
+        # discord_att.width = width
+        # discord_att.height = height
+        # discord_att.size = data_length
+        await discord_channel.send(discord.File(fp=BytesIO(data)))
+    else:
+        print("Received data is wrong.")
 
-# async def collect_data(data, discord_channel):
-#     for fragment in data:
-
-# From: https://stackoverflow.com/a/22207830
-# def recvall(sock, count):
-#     buf = b''
-#     while count:
-#         newbuf = sock.recv(count)
-#         if not newbuf: return None
-#         buf += newbuf
-#         count -= len(newbuf)
-#     return buf
 
 # Message: b'<img_height>|<img_bytes>|<img_data...>'
-async def tcp_handler(socket, discord_channel):
+async def tcp_handler(socket: socket.socket, discord_channel: discord.channel.TextChannel):
     global EXIT
 
-    # For all connections
-    while not EXIT:
+    #token = ""
 
-        print("Waiting for a screenshot...")
+    print("Waiting for a screenshot...")
 
-        # Where the image is
-        img_data = b''
+    # The image is stored here (as bytes)
+    img_data = b''
 
-        # Initial bytes to read
-        initial_bytes = 50
+    # Initial bytes to read to parse the metadata (img_height and img_bytes)
+    initial_bytes = 50
 
-        # Image data size in bytes
-        img_bytes = 0
+    # Image data size in bytes
+    img_bytes = 0
 
-        initial_buffer = socket.recv(initial_bytes)
+    initial_buffer = socket.recv(initial_bytes)
 
-        # Data from the initial buffer
-        initial_data = initial_buffer.split(bytes('|', 'utf-8'), 2)
+    print("[" + time.strftime("%H:%M:%S", time.localtime()) + "] Got a screenshot.")
+
+    # Data from the initial buffer
+    initial_data = initial_buffer.split(bytes('|', 'utf-8'), 2)
+
+    # If it can correctly be parsed, it means that a new screenshot has been received. Otherwise just retry.
+    if len(initial_data) == 3:
 
         # Metadata (img_height + img_bytes)
-        metadata = initial_data[0:1]
-        metadata_bytes = len(''.join(map(str, metadata))) + 2
+        metadata = initial_data[0:2]
 
         # Metadata parsed
         img_height = int(metadata[0].decode('utf-8'))
         img_bytes = int(metadata[1].decode('utf-8'))
 
-
         img_data += initial_data[2]
-
-        # Total message bytes (metadata + img_bytes)
-        #total_bytes = metadata_bytes + img_bytes
         
         # Read the bytes of image that haven't been read yet
-        while img_bytes - len(img_data) > 0:
+        while len(img_data) < img_bytes:
             img_data += socket.recv(BUFFER_SIZE)
-            
-        print("[" + time.strftime("%H:%M:%S", time.localtime()) + "] Got a screenshot.")
 
-        await send_screenshot(img_data, discord_channel)
-        print("Screenshot sent to Discord!")
+        await send_screenshot(img_data, img_height, discord_channel)
+        print("  Screenshot sent to Discord!")
+    
 
 
 # Listen for screenshot (blocking) and return it
-async def start(host, port, discord_channel):
-    global EXIT
-    print(f"Connecting to {host}:{port}")
+async def start(host: str, port: str, discord_channel: discord.channel.TextChannel):
+    print(f"Connecting to {host}:{port}...")
     
     # Create a TCP/IP socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    # Connect the socket to the port where the server is listening
-    s.connect((host, int(port)))
-    await tcp_handler(s, discord_channel)
+    while not EXIT:
+        # Connect the socket to the port where the server is listening
+        s.connect((host, int(port)))
+        
+        await tcp_handler(s, discord_channel)
+        time.sleep(SLEEP_TIME_EMPTY_MSG)
 
 
 @client.event
@@ -129,7 +123,7 @@ async def on_guild_join(guild):
 
 
 @client.event
-async def on_error(message):
+async def on_error(message: discord.message.Message):
     await message.channel.send("The bot encountered an unexpected error and needs to be restared.")
 
 
@@ -137,7 +131,7 @@ async def on_error(message):
 # Send message: `await message.channel.send("...")`
 # Fetch message: `message.content`
 @client.event
-async def on_message(message):
+async def on_message(message: discord.message.Message):
     if message.author.id == client.user.id:
         return
 
@@ -200,6 +194,9 @@ async def on_message(message):
             printable_msg = printable_msg[:end]
         
         await message.channel.send(f"Ciao { printable_msg.strip() }, sono Vittorio.")
+    
+    elif "grazie vittorio" in message.content.lower() or "grazie, vittorio" in message.content.lower():
+        await message.channel.send("Figurati figliolo")
 
     # Help
     elif message.content.lower() == "vitto help":
