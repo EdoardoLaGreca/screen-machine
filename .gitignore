@@ -3,6 +3,7 @@ backend/target
 backend/Cargo.lock
 backend/bin
 backend/screenshots
+screenshots
 *.png
 
 # Bot (Python)
