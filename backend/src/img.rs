@@ -11,6 +11,7 @@ use std::cmp::{max, min};
 use std::sync::{Arc, Mutex};
 
 use crate::MachineKind;
+use crate::DIFF_TOTAL;
 
 #[derive(Clone, Debug)]
 pub struct RgbImage {
@@ -88,7 +89,7 @@ fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
     let mut avg_g: u64 = 0;
     let mut avg_b: u64 = 0;
 
-    assert!(v.len() == 0, "Cannot divide by zero");
+    assert!(v.len() != 0, "Cannot divide by zero");
 
     // Keep memorized the vector length
     let v_len = v.len();
@@ -132,12 +133,12 @@ fn parallel_avg(v: Vec<[u8;3]>) -> [u8;3] {
 
 // A quantification of the differences between two screenshots
 // My own implementation
-pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u8 {
+pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> f32 {
 
-    // If sizes are different return 100
-    if img1.data.len() != img2.data.len() {
-        return 100;
-    }
+    // If sizes are different return DIFF_TOTAL
+    //if img1.data.len() != img2.data.len() {
+    //    return DIFF_TOTAL;
+    //}
     
     // Calculate the average color for each image
     let avg_color_img1 = parallel_avg(img1.data);
@@ -151,11 +152,11 @@ pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> u8 {
     ];
 
     // Min: 0 -> there is no difference at all
-    // Max: 100 -> the two images are completely different
-    let difference_percentage: u8 = {
-        (difference[0] as f32 / 256f32 * 100f32) as u8 +
-        (difference[1] as f32 / 256f32 * 100f32) as u8 +
-        (difference[2] as f32 / 256f32 * 100f32) as u8
+    // Max: DIFF_TOTAL -> the two images are completely different
+    let difference_percentage: f32 = {
+        (difference[0] as f32 / 255.0f32 * DIFF_TOTAL) +
+        (difference[1] as f32 / 255.0f32 * DIFF_TOTAL) +
+        (difference[2] as f32 / 255.0f32 * DIFF_TOTAL)
     };
 
     difference_percentage
