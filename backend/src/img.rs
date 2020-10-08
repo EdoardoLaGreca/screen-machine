@@ -20,6 +20,15 @@ pub struct RgbImage {
     pub height: u32
 }
 
+#[derive(Clone, Debug)]
+pub struct Window {
+    pub x_pos: u32,
+    pub y_pos: u32,
+    pub width: u32,
+    pub height: u32,
+    pub id: String
+}
+
 impl RgbImage {
 
     // Empty image
@@ -78,6 +87,44 @@ impl RgbImage {
         }
 
         output
+    }
+}
+
+impl Window {
+    pub fn new<T: ToString>(xpos: u32, ypos: u32, width: u32, height: u32, id: T) -> Window {
+        Window {
+            x_pos: xpos,
+            y_pos: ypos,
+            width: width,
+            height: height,
+            id: id.to_string()
+        }
+    }
+
+    pub fn take_screenshot(&self, save_path: String) -> RgbImage {
+        // Take a screenshot and save it
+        screenshot_rs::screenshot_area(save_path.clone(), false);
+
+        // Load the saved screenshot and return it
+        //let result = image::open(file);
+        let decoder = Decoder::new_with_limits(File::open(save_path).unwrap(), Limits::default());
+        let mut reader = decoder.read_info().unwrap().1;
+
+        let mut img_data: Vec<u8> = vec![];
+
+        // Fill img_data by reading data from reader
+        let mut row_buffer: Option<&[u8]> = reader.next_row().unwrap();
+        while let Some(buffer) = row_buffer {
+            //vec![img_data, buffer.to_vec()].concat();
+            img_data.extend_from_slice(buffer);
+            row_buffer = reader.next_row().unwrap();
+        }
+
+        // Assert that they are actual RGB subpixels and not something else, just in case
+        assert!(img_data.len() % 3 == 0, "It's not a vector of RGB subpixels");
+
+        RgbImage::from_rgb(img_data, self.width, self.height)
+
     }
 }
 
@@ -162,45 +209,9 @@ pub fn calc_diff(img1: RgbImage, img2: RgbImage) -> f32 {
     difference_percentage
 }
 
-fn screenshot_active_window_unix(file: String) -> Result<RgbImage, ()> {
-    // Screenshot the current active window and save it in path
-    screenshot_rs::screenshot_window(file.clone());
-
-    // Load the saved screenshot and return it
-    //let result = image::open(file);
-    let img = Decoder::new_with_limits(File::open(file).unwrap(), Limits::default());
-
-    let mut img_data: Vec<u8> = vec![];
-
-    let width: u32;
-    let height: u32;
-
-    // Used to read the image data
-    let mut reader = match img.read_info() {
-        Ok(info) => {
-            // Also, get info about image width and height
-            width = info.0.width;
-            height = info.0.height;
-
-            info.1
-        },
-        Err(_) => return Err(())
-    };
-
-    // Fill img_data by reading data from reader
-    let mut row_buffer: Option<&[u8]> = reader.next_row().unwrap();
-    while let Some(buffer) = row_buffer {
-        //vec![img_data, buffer.to_vec()].concat();
-        img_data.extend_from_slice(buffer);
-        row_buffer = reader.next_row().unwrap();
-    }
-
-    // Assert that they are actual RGB subpixels and not something else, just in case
-    assert!(img_data.len() % 3 == 0, "It's not a vector of RGB subpixels");
-
-    Ok(
-        RgbImage::from_rgb(img_data, width, height)
-    )
+fn screenshot_active_window_unix(window: Window, file: String) -> Result<RgbImage, ()> {
+    
+    Ok(window.take_screenshot(file))
 }
 
 // Use winapi (https://docs.rs/winapi/0.3.9/winapi/)
@@ -211,9 +222,9 @@ fn screenshot_active_window_windows(file: String) -> Result<RgbImage, ()> {
 
 // Public function to screenshot the currently active window. Save the screenshot
 // in the file parameter, which should contain both the path and the filename
-pub fn screenshot_active_window(mkind: MachineKind, file: String) -> Result<RgbImage, ()> {
+pub fn screenshot_active_window(window: Window, mkind: MachineKind, file: String) -> Result<RgbImage, ()> {
     match mkind {
-        MachineKind::Unix => screenshot_active_window_unix(file),
+        MachineKind::Unix => screenshot_active_window_unix(window, file),
         MachineKind::Windows => screenshot_active_window_windows(file)
     }
 }

@@ -1,10 +1,23 @@
 extern crate chrono;
+#[macro_use]
+extern crate lazy_static;
+extern crate xdotool;
 
 use chrono::prelude::*;
+use xdotool::{
+    command::{
+        Command,
+        sub_commands::Window::{
+            SelectWindow,
+        },
+    },
+    optionvec::OptionVec,
+    option_vec,
+    window::get_window_geometry
+};
 
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
-use std::thread::spawn;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
@@ -12,18 +25,21 @@ mod img;
 
 // See this (to keep taking screenshots of the same window): https://stackoverflow.com/questions/5262413/does-xlib-have-an-active-window-event
 
-// A quantification of the differences between two screenshots (see crate::img::calc_diff()).
-// If the difference is higher or equal to this number, send the screenshot.
-// Min: 0 -> there is no difference at all
-// Max: DIFF_TOTAL -> the two images are completely different
-static IMG_DIFF: f32 = 0.0; //UPDATE THIS
+lazy_static! {
+    // A quantification of the differences between two screenshots (see crate::img::calc_diff()).
+    // If the difference is higher or equal to this number, send the screenshot.
+    // Min: 0 -> there is no difference at all
+    // Max: DIFF_TOTAL -> the two images are completely different
+    static ref IMG_DIFF: f32 = include_str!("../var/IMG_DIFF").to_owned().parse().unwrap();
+}
+
 static DIFF_TOTAL: f32 = 100.0;
 
 // Delay between checking screenshots (in ms), the number must be equal or greater than the bot's requests delay
-static SCREEN_DELAY: u64 = 2000;
+static SCREEN_DELAY: u64 = 4000;
 
 // Listen for connections on this address
-static LISTEN_ON: &str = "127.0.0.1:4444";
+static LISTEN_ON: &str = "127.0.0.1:4040";
 
 // Save screenshots on disk (on this path) in case there was a network issue
 // Use local directory
@@ -47,11 +63,11 @@ pub fn get_machine_kind() -> Result<MachineKind, ()> {
 }
 
 // Take the screenshots and return the updated input values
-fn screenshooter(previous_scrn: &mut img::RgbImage, current_scrn: &mut img::RgbImage, must_send_prev_scrn: &mut bool, machine_kind: MachineKind) {
+fn screenshooter(previous_scrn: &mut img::RgbImage, current_scrn: &mut img::RgbImage, must_send_prev_scrn: &mut bool, machine_kind: MachineKind, window: img::Window) {
 
     // Take a screenshot (and create a filename for it)
     let filename = Local::now().format("Screenshot_%H-%M-%S.png").to_string();
-    let screenshot: img::RgbImage = img::screenshot_active_window(machine_kind, format!("{}{}", SAVE_PATH, filename)).expect("An error occurred during the screenshot process (filesystem I/O ?)");
+    let screenshot: img::RgbImage = img::screenshot_active_window(window, machine_kind, format!("{}{}", SAVE_PATH, filename)).expect("An error occurred during the screenshot process (filesystem I/O ?)");
     println!("Screenshot taken!");
 
     // Move screenshots
@@ -71,9 +87,9 @@ fn screenshooter(previous_scrn: &mut img::RgbImage, current_scrn: &mut img::RgbI
         };
 
         // If the difference is huge (aka most of the previous things has been deleted), send previous_screenshot (current_screenshot contains the new blank one)
-        if diff >= IMG_DIFF {
+        if diff >= *IMG_DIFF {
             if previous_scrn.height != 0 && previous_scrn.width != 0 {
-                println!("    diff = {}, diff >= {} (IMG_DIFF)", diff, IMG_DIFF);
+                println!("    diff = {}, diff >= {} (IMG_DIFF)", diff, *IMG_DIFF);
                 
                 *must_send_prev_scrn = true;
 
@@ -81,13 +97,15 @@ fn screenshooter(previous_scrn: &mut img::RgbImage, current_scrn: &mut img::RgbI
                 *must_send_prev_scrn = false;
             }
         } else {
-            println!("    diff = {}, diff < {} (IMG_DIFF)", diff, IMG_DIFF);
+            println!("    diff = {}, diff < {} (IMG_DIFF)", diff, *IMG_DIFF);
             *must_send_prev_scrn = false;
 
             // If there are NO differences, also delete the image
             if diff == 0.0 {
-                if let Err(_) = std::fs::remove_dir(format!("screenshots/{}", filename)) {
+                if let Err(_) = std::fs::remove_file(format!("screenshots/{}", filename)) {
                     println!("Warning: an error occurred while trying to delete a duplicated screenshot (diff = 0).")
+                } else {
+                    println!("Duplicated screenshot successfully deleted (diff = 0).")
                 }
             }
         }
@@ -98,10 +116,6 @@ fn screenshooter(previous_scrn: &mut img::RgbImage, current_scrn: &mut img::RgbI
 }
 
 fn handle_client_conn(stream: &mut TcpStream, screenshot: img::RgbImage, must_send_scrn: bool, last_sent_scrn_hash: String) {
-
-    // Remote address of client
-    let remote_addr = stream.peer_addr().unwrap();
-    println!("Connected to {}", remote_addr.clone());
 
     // Screenshot's hash
     let scrn_hash = format!("{:x}", md5::compute(screenshot.as_vec_u8()));
@@ -117,7 +131,7 @@ fn handle_client_conn(stream: &mut TcpStream, screenshot: img::RgbImage, must_se
 
         let img_bytes_num = screenshot.data.len() * 3;
 
-        // Create the message to send
+        // Create the message to send (since TCP is a stream-based protocol, data is a stream - not a message)
         let mut msg: Vec<u8> = (screenshot.height.to_string()).as_bytes().to_owned(); // Start with the image height
         msg.push('|' as u8); // Insert a separator
         msg.append(&mut img_bytes_num.to_string().as_bytes().to_owned()); // Insert the image length (width * height * 3) in bytes
@@ -129,11 +143,11 @@ fn handle_client_conn(stream: &mut TcpStream, screenshot: img::RgbImage, must_se
         println!("  Image sent!");
     } else {
 
+        println!("No screenshot to send.");
+
         // Otherwise, send an empty message, meaning that the required screenshot has already been sent
         stream.write(&[]).expect("Uncaught stream error");
     }
-
-    println!("Disconnected from {}", remote_addr.clone());
 }
 
 fn main() {
@@ -146,15 +160,39 @@ fn main() {
     } else {
         println!("Cannot create screenshots dir. It may already exist.")
     }
+
+    let mut window_info: img::Window = img::Window::new(0, 0, 0, 0, "0");
     
     match mkind {
         MachineKind::Unix => {
-            println!("Unix-like machine detected. Starting...");
+            println!("Unix-like machine detected.");
+
+            println!("Select a window to screenshot by clicking the cursor on it...");
+            
+            // Get info about window
+            let select_cmd = Command::Window(SelectWindow);
+            let window_id = String::from_utf8(
+                xdotool::run(select_cmd, "").stdout
+            ).unwrap();
+            let window_geometry = get_window_geometry(&window_id, option_vec![]);
+
+            window_info.id = window_id;
+
+            String::from_utf8(window_geometry.clone().stdout).unwrap();
+
+            println!("{}", String::from_utf8(window_geometry.stdout).unwrap());
+        
+
+
         },
         MachineKind::Windows => {
-            println!("Windows-like machine detected. Starting...");
+            println!("Windows-like machine detected.");
         },
     }
+
+    todo!();
+
+    println!("The chosen value for IMG_DIFF is {}", *IMG_DIFF);
 
     // Screenshots
     let previous_screenshot: Arc<Mutex<img::RgbImage>> = Arc::new(Mutex::new(img::RgbImage::new()));
@@ -173,14 +211,19 @@ fn main() {
 
         // Do screenshots and save them
         std::thread::spawn(move || {
-            let mut previous_screenshot = previous_screenshot.lock().unwrap();
-            let mut current_screenshot = current_screenshot.lock().unwrap();
-            let mut must_send_prev_scrn = must_send_prev_scrn.lock().unwrap();
-            
             loop {
 
-                screenshooter(&mut *previous_screenshot, &mut *current_screenshot, &mut *must_send_prev_scrn, mkind);
-        
+                {
+                    let mut previous_screenshot = previous_screenshot.lock().unwrap();
+                    let mut current_screenshot = current_screenshot.lock().unwrap();
+                    let mut must_send_prev_scrn = must_send_prev_scrn.lock().unwrap();
+    
+                    screenshooter(&mut *previous_screenshot, &mut *current_screenshot, &mut *must_send_prev_scrn, mkind, window_info.clone());
+                }
+                
+                // Separator
+                println!("");
+                
                 // Sleep to prevent accidentally DoSsing the bot
                 std::thread::sleep(Duration::from_millis(SCREEN_DELAY));
             }
@@ -198,13 +241,32 @@ fn main() {
         let must_send_prev_scrn = must_send_prev_scrn.clone();
         let last_sent_screenshot_hash = last_sent_screenshot_hash.clone();
 
-        spawn ( move || {
+        std::thread::spawn ( move || {
 
             let previous_screenshot = previous_screenshot.lock().unwrap();
             let must_send_prev_scrn = must_send_prev_scrn.lock().unwrap();
             let last_sent_screenshot_hash = last_sent_screenshot_hash.lock().unwrap();
 
-            handle_client_conn(&mut stream.expect("Stream error"), (*previous_screenshot).clone(), *must_send_prev_scrn, (*last_sent_screenshot_hash).clone());
+            // Remote address of client
+            let mut stream = stream.expect("Stream error");
+            let remote_addr = stream.peer_addr().unwrap();
+            println!("Connected to {}", remote_addr.clone());
+
+            let mut buffer: [u8;10] = [0;10];
+
+            let read_bytes = stream.read(&mut buffer).expect("Error while reading data from TCP stream");            
+
+            let mut msg = buffer[0..read_bytes].to_vec();
+
+            while String::from_utf8(msg.to_vec()).unwrap() == String::from("more") {
+                handle_client_conn(&mut stream, (*previous_screenshot).clone(), *must_send_prev_scrn, (*last_sent_screenshot_hash).clone());
+
+                // Update buffer and message
+                stream.read(&mut buffer).expect("Error while reading data from TCP stream");
+                msg = buffer[0..read_bytes].to_vec();
+            }
+
+            println!("Disconnected from {}", remote_addr.clone());
         });
     }
 }
