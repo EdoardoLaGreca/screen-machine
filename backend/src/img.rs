@@ -26,7 +26,7 @@ pub struct Window {
     pub y_pos: u32,
     pub width: u32,
     pub height: u32,
-    pub id: String
+    pub id: String // Could be an integer, but just to be sure
 }
 
 impl RgbImage {

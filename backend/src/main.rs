@@ -2,6 +2,7 @@ extern crate chrono;
 #[macro_use]
 extern crate lazy_static;
 extern crate xdotool;
+extern crate regex;
 
 use chrono::prelude::*;
 use xdotool::{
@@ -161,7 +162,7 @@ fn main() {
         println!("Cannot create screenshots dir. It may already exist.")
     }
 
-    let mut window_info: img::Window = img::Window::new(0, 0, 0, 0, "0");
+    let mut selected_window: img::Window = img::Window::new(0, 0, 0, 0, "0");
     
     match mkind {
         MachineKind::Unix => {
@@ -169,21 +170,39 @@ fn main() {
 
             println!("Select a window to screenshot by clicking the cursor on it...");
             
-            // Get info about window
+            // Get window id
             let select_cmd = Command::Window(SelectWindow);
             let window_id = String::from_utf8(
                 xdotool::run(select_cmd, "").stdout
             ).unwrap();
+            selected_window.id = window_id.clone();
+
+            // Get window info (geometry)
             let window_geometry = get_window_geometry(&window_id, option_vec![]);
+            let win_geom_output = String::from_utf8(window_geometry.stdout).unwrap();
 
-            window_info.id = window_id;
-
-            String::from_utf8(window_geometry.clone().stdout).unwrap();
-
-            println!("{}", String::from_utf8(window_geometry.stdout).unwrap());
+            println!("{}", win_geom_output);
         
+            // Parse the output of get_window_geometry(...)
+            let regx = regex::Regex::new(r#"[0-9]+[x,][0-9]+"#).unwrap(); // Gets only position and geometry (size)
 
+            // Add the captured values to selected_window
+            {
+                let captures = regx.captures(&win_geom_output).unwrap();
 
+                println!("{:?}", captures);
+
+                assert!(captures.len() == 2);
+
+                // Split position into x and y (is printed as "x,y")
+                let position: Vec<&str> = captures[0].split(',').collect();
+
+                selected_window.x_pos = position[0].parse().unwrap();
+                selected_window.y_pos = position[1].parse().unwrap();
+
+            }
+
+            println!("{:?}", selected_window); //DEBUG
         },
         MachineKind::Windows => {
             println!("Windows-like machine detected.");
@@ -218,7 +237,7 @@ fn main() {
                     let mut current_screenshot = current_screenshot.lock().unwrap();
                     let mut must_send_prev_scrn = must_send_prev_scrn.lock().unwrap();
     
-                    screenshooter(&mut *previous_screenshot, &mut *current_screenshot, &mut *must_send_prev_scrn, mkind, window_info.clone());
+                    screenshooter(&mut *previous_screenshot, &mut *current_screenshot, &mut *must_send_prev_scrn, mkind, selected_window.clone());
                 }
                 
                 // Separator
